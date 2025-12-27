@@ -46,7 +46,7 @@ export default function Profile() {
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [myProperties, setMyProperties] = useState<PropertyData[]>([]);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -78,6 +78,7 @@ export default function Profile() {
   const loadProfile = async () => {
     if (!user) return;
 
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('app_2ea33eecc0_profiles')
@@ -85,18 +86,51 @@ export default function Profile() {
         .eq('id', user.id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // If profile doesn't exist, create one
+        if (error.code === 'PGRST116') {
+          const { data: newProfile, error: createError } = await supabase
+            .from('app_2ea33eecc0_profiles')
+            .insert([
+              {
+                id: user.id,
+                first_name: '',
+                last_name: '',
+                phone: '',
+                location: '',
+                bio: '',
+              },
+            ])
+            .select()
+            .single();
 
-      setProfile(data);
-      setProfileForm({
-        firstName: data.first_name || '',
-        lastName: data.last_name || '',
-        phone: data.phone || '',
-        location: data.location || '',
-        bio: data.bio || '',
-      });
+          if (createError) throw createError;
+          setProfile(newProfile);
+          setProfileForm({
+            firstName: newProfile.first_name || '',
+            lastName: newProfile.last_name || '',
+            phone: newProfile.phone || '',
+            location: newProfile.location || '',
+            bio: newProfile.bio || '',
+          });
+        } else {
+          throw error;
+        }
+      } else {
+        setProfile(data);
+        setProfileForm({
+          firstName: data.first_name || '',
+          lastName: data.last_name || '',
+          phone: data.phone || '',
+          location: data.location || '',
+          bio: data.bio || '',
+        });
+      }
     } catch (error) {
       console.error('Error loading profile:', error);
+      toast.error('Failed to load profile');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -194,19 +228,26 @@ export default function Profile() {
     }
   };
 
-  if (!user || !profile) {
+  if (!user) {
+    return null;
+  }
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Navbar />
         <div className="container mx-auto px-4 py-20 text-center">
-          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+          <div className="flex flex-col items-center justify-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading your profile...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
       <Navbar />
 
       <div className="container mx-auto px-4 py-8">
@@ -293,7 +334,9 @@ export default function Profile() {
                         <div>
                           <p className="text-sm text-gray-600 dark:text-gray-400">Name</p>
                           <p className="font-medium dark:text-white">
-                            {profile.first_name} {profile.last_name}
+                            {profile?.first_name || profile?.last_name
+                              ? `${profile.first_name} ${profile.last_name}`
+                              : 'Not set'}
                           </p>
                         </div>
                       </div>
@@ -304,7 +347,7 @@ export default function Profile() {
                           <p className="font-medium dark:text-white">{user.email}</p>
                         </div>
                       </div>
-                      {profile.phone && (
+                      {profile?.phone && (
                         <div className="flex items-center gap-3">
                           <Phone className="h-5 w-5 text-gray-500" />
                           <div>
@@ -313,7 +356,7 @@ export default function Profile() {
                           </div>
                         </div>
                       )}
-                      {profile.location && (
+                      {profile?.location && (
                         <div className="flex items-center gap-3">
                           <MapPin className="h-5 w-5 text-gray-500" />
                           <div>
@@ -322,7 +365,7 @@ export default function Profile() {
                           </div>
                         </div>
                       )}
-                      {profile.bio && (
+                      {profile?.bio && (
                         <div>
                           <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Bio</p>
                           <p className="text-gray-700 dark:text-gray-300">{profile.bio}</p>

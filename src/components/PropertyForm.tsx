@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
+import ImageUploader from './ImageUploader';
 
 interface PropertyFormProps {
   onSuccess?: () => void;
@@ -50,7 +51,7 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
     parking: initialData?.parking?.toString() || '',
     furnished: initialData?.furnished || false,
     features: initialData?.features || [],
-    imageUrls: initialData?.images || [''],
+    images: initialData?.images || [],
   });
 
   const [newFeature, setNewFeature] = useState('');
@@ -72,24 +73,8 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
     });
   };
 
-  const addImageUrl = () => {
-    setFormData({
-      ...formData,
-      imageUrls: [...formData.imageUrls, ''],
-    });
-  };
-
-  const updateImageUrl = (index: number, value: string) => {
-    const newUrls = [...formData.imageUrls];
-    newUrls[index] = value;
-    setFormData({ ...formData, imageUrls: newUrls });
-  };
-
-  const removeImageUrl = (index: number) => {
-    setFormData({
-      ...formData,
-      imageUrls: formData.imageUrls.filter((_: string, i: number) => i !== index),
-    });
+  const handleImagesChange = (images: string[]) => {
+    setFormData({ ...formData, images });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,6 +82,11 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
 
     if (!user) {
       toast.error('Please sign in to add a property');
+      return;
+    }
+
+    if (formData.images.length === 0) {
+      toast.error('Please upload at least one photo');
       return;
     }
 
@@ -118,7 +108,7 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
         parking: parseInt(formData.parking) || null,
         furnished: formData.furnished,
         features: formData.features,
-        images: formData.imageUrls.filter((url: string) => url.trim()),
+        images: formData.images,
         status: 'active',
       };
 
@@ -150,7 +140,7 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
     <Card>
       <CardHeader>
         <CardTitle>{initialData ? 'Edit Property' : 'Add New Property'}</CardTitle>
-        <CardDescription>Fill in the details of your property listing</CardDescription>
+        <CardDescription>Fill in the property details</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -161,7 +151,7 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               required
-              placeholder="e.g., Modern 3BR Apartment in Downtown"
+              placeholder="e.g., Modern 3 Bedroom Apartment in City Center"
             />
           </div>
 
@@ -178,7 +168,7 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="price">Price ($) *</Label>
+              <Label htmlFor="price">Price (€) *</Label>
               <Input
                 id="price"
                 type="number"
@@ -196,7 +186,7 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
                 value={formData.location}
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 required
-                placeholder="e.g., New York, NY"
+                placeholder="e.g., Istanbul, Sisli"
               />
             </div>
           </div>
@@ -300,31 +290,12 @@ export default function PropertyForm({ onSuccess, onCancel, initialData }: Prope
           </div>
 
           <div>
-            <Label>Image URLs</Label>
-            <div className="space-y-2">
-              {formData.imageUrls.map((url: string, index: number) => (
-                <div key={index} className="flex gap-2">
-                  <Input
-                    value={url}
-                    onChange={(e) => updateImageUrl(index, e.target.value)}
-                    placeholder="/images/photo1766072817.jpg"
-                  />
-                  {formData.imageUrls.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => removeImageUrl(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-              <Button type="button" variant="outline" onClick={addImageUrl} className="w-full">
-                Add Another Image
-              </Button>
-            </div>
+            <Label>Photos *</Label>
+            <ImageUploader 
+              onImagesChange={handleImagesChange}
+              maxImages={10}
+              existingImages={formData.images}
+            />
           </div>
 
           <div>
