@@ -1,140 +1,122 @@
-import { useCallback, useState } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { useRef, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { X, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ImageUploaderProps {
-  onImagesChange: (images: string[]) => void;
+  onImagesChange: (urls: string[]) => void;
   maxImages?: number;
   existingImages?: string[];
 }
 
-export default function ImageUploader({ 
-  onImagesChange, 
+export default function ImageUploader({
+  onImagesChange,
   maxImages = 10,
-  existingImages = []
+  existingImages = [],
 }: ImageUploaderProps) {
+  const { user } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<string[]>(existingImages);
-  const [previews, setPreviews] = useState<string[]>(existingImages);
+  const [uploading, setUploading] = useState(false);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const remainingSlots = maxImages - images.length;
-    const filesToProcess = acceptedFiles.slice(0, remainingSlots);
+  const uploadImage = async (file: File) => {
+    if (!user) return;
 
-    filesToProcess.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        setPreviews((prev) => {
-          const newPreviews = [...prev, result];
-          return newPreviews;
-        });
-        setImages((prev) => {
-          const newImages = [...prev, result];
-          onImagesChange(newImages);
-          return newImages;
-        });
-      };
-      reader.readAsDataURL(file);
-    });
-  }, [images.length, maxImages, onImagesChange]);
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.gif']
-    },
-    maxFiles: maxImages - images.length,
-    disabled: images.length >= maxImages
-  });
+    const { error } = await supabase.storage
+      .from("property-images")
+      .upload(fileName, file);
 
-  const removeImage = (index: number) => {
-    const newImages = images.filter((_, i) => i !== index);
-    const newPreviews = previews.filter((_, i) => i !== index);
-    setImages(newImages);
-    setPreviews(newPreviews);
-    onImagesChange(newImages);
+    if (error) throw error;
+
+    const { data } = supabase.storage
+      .from("property-images")
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files) return;
+
+    if (images.length + files.length > maxImages) {
+      toast.error(`Maximum ${maxImages} images allowed`);
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const url = await uploadImage(files[i]);
+        if (url) uploadedUrls.push(url);
+      }
+
+      const updatedImages = [...images, ...uploadedUrls];
+      setImages(updatedImages);
+      onImagesChange(updatedImages);
+
+      toast.success("Images uploaded successfully!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Image upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeImage = async (index: number) => {
+    const updatedImages = images.filter((_, i) => i !== index);
+    setImages(updatedImages);
+    onImagesChange(updatedImages);
   };
 
   return (
     <div className="space-y-4">
-      {/* Upload Area */}
-      {images.length < maxImages && (
-        <div
-          {...getRootProps()}
-          className={cn(
-            "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
-            isDragActive 
-              ? "border-primary bg-primary/5" 
-              : "border-gray-300 dark:border-gray-600 hover:border-primary",
-            images.length >= maxImages && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          <input {...getInputProps()} />
-          <div className="flex flex-col items-center gap-2">
-            <Upload className="h-12 w-12 text-gray-400" />
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              {isDragActive ? (
-                <p className="font-medium text-primary">Fotoğrafları buraya bırakın...</p>
-              ) : (
-                <>
-                  <p className="font-medium">Fotoğraf yüklemek için tıklayın veya sürükleyin</p>
-                  <p className="text-xs mt-1">PNG, JPG, JPEG, WEBP, GIF (Maks. {maxImages} fotoğraf)</p>
-                </>
-              )}
-            </div>
-            <Button type="button" variant="outline" size="sm" className="mt-2">
-              <ImageIcon className="h-4 w-4 mr-2" />
-              Dosya Seç
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Image Previews */}
-      {previews.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">
-              Yüklenen Fotoğraflar ({previews.length}/{maxImages})
-            </p>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-            {previews.map((preview, index) => (
-              <div key={index} className="relative group aspect-square">
-                <img
-                  src={preview}
-                  alt={`Preview ${index + 1}`}
-                  className="w-full h-full object-cover rounded-lg border-2 border-gray-200 dark:border-gray-700"
-                />
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    onClick={() => removeImage(index)}
-                    className="h-8 w-8"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                {index === 0 && (
-                  <div className="absolute top-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded">
-                    Ana Fotoğraf
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {images.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-          Henüz fotoğraf yüklenmedi
+      <div
+        className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50"
+        onClick={() => fileInputRef.current?.click()}
+      >
+        <Upload className="mx-auto mb-2 h-6 w-6 text-gray-500" />
+        <p className="text-sm text-gray-500">
+          Click or drag images to upload
         </p>
-      )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handleFiles(e.target.files)}
+        />
+      </div>
+
+      {uploading && <p className="text-sm text-gray-500">Uploading...</p>}
+
+      <div className="grid grid-cols-3 gap-3">
+        {images.map((img, index) => (
+          <div key={index} className="relative">
+            <img
+              src={img}
+              alt="Property"
+              className="rounded-lg h-24 w-full object-cover"
+            />
+            <button
+              type="button"
+              onClick={() => removeImage(index)}
+              className="absolute top-1 right-1 bg-white rounded-full p-1 shadow"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
