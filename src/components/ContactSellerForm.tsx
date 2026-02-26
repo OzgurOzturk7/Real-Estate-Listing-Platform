@@ -10,12 +10,9 @@ import { toast } from 'sonner';
 import { Mail, Phone, User } from 'lucide-react';
 
 interface ContactSellerFormProps {
-  propertyId: string;
-  propertyTitle: string;
-  sellerId: string;
-  sellerName: string;
-  sellerEmail: string;
-  sellerPhone?: string;
+  propertyId: string
+  propertyTitle: string
+  sellerEmail?: string
 }
 
 export default function ContactSellerForm({

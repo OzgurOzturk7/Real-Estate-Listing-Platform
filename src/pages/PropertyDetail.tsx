@@ -1,6 +1,14 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { MapPin, Bed, Bath, Square, Car, Heart, Share2, Phone, Mail } from 'lucide-react';
+import {
+  MapPin,
+  Bed,
+  Bath,
+  Square,
+  Car,
+  Heart,
+  Share2
+} from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,9 +25,11 @@ export default function PropertyDetail() {
 
   const [property, setProperty] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isFavorite, setIsFavorite] = useState(false);
 
   const isAdmin = user?.user_metadata?.role === 'admin';
 
+  // 🔹 Property fetch
   useEffect(() => {
     if (!id) return;
 
@@ -30,10 +40,10 @@ export default function PropertyDetail() {
         .eq('id', id)
         .single();
 
-      if (error) {
-        setProperty(null);
-      } else {
+      if (!error && data) {
         setProperty(data);
+      } else {
+        setProperty(null);
       }
 
       setLoading(false);
@@ -42,6 +52,46 @@ export default function PropertyDetail() {
     fetchProperty();
   }, [id]);
 
+  // 🔹 Favori kontrol
+  useEffect(() => {
+    if (!user || !property) return;
+
+    const savedFavorites = localStorage.getItem(`favorites_${user.id}`);
+    if (savedFavorites) {
+      const favoriteIds = JSON.parse(savedFavorites);
+      const isFav = favoriteIds.some(
+        (favId: any) => String(favId) === String(property.id)
+      );
+      setIsFavorite(isFav);
+    }
+  }, [user, property]);
+
+  // 🔹 Favori toggle
+  const handleFavoriteClick = () => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    const storageKey = `favorites_${user.id}`;
+    const savedFavorites = localStorage.getItem(storageKey);
+    let favoriteIds: any[] = savedFavorites
+      ? JSON.parse(savedFavorites)
+      : [];
+
+    if (isFavorite) {
+      favoriteIds = favoriteIds.filter(
+        (favId: any) => String(favId) !== String(property.id)
+      );
+    } else {
+      favoriteIds.push(property.id);
+    }
+
+    localStorage.setItem(storageKey, JSON.stringify(favoriteIds));
+    setIsFavorite(!isFavorite);
+  };
+
+  // 🔹 Loading
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -51,12 +101,13 @@ export default function PropertyDetail() {
     );
   }
 
+  // 🔹 Not found
   if (!property) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <Navbar />
-        <div className="max-w-7xl mx-auto px-4 py-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+        <div className="text-center py-20">
+          <h1 className="text-2xl font-bold mb-4">
             Property Not Found
           </h1>
           <Button onClick={() => navigate('/properties')}>
@@ -70,14 +121,14 @@ export default function PropertyDetail() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Navbar />
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        {/* Header */}
+        {/* HEADER */}
         <div className="mb-6">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              <h1 className="text-3xl font-bold mb-2">
                 {property.title}
               </h1>
               <div className="flex items-center text-gray-600 dark:text-gray-400">
@@ -85,20 +136,34 @@ export default function PropertyDetail() {
                 <span>{property.location}</span>
               </div>
             </div>
+
             <div className="flex gap-2">
-              <Button variant="outline" size="icon">
-                <Heart className="h-5 w-5" />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleFavoriteClick}
+                className={isFavorite ? 'text-red-500' : ''}
+              >
+                <Heart
+                  className={`h-5 w-5 ${
+                    isFavorite ? 'fill-current' : ''
+                  }`}
+                />
               </Button>
+
               <Button variant="outline" size="icon">
                 <Share2 className="h-5 w-5" />
               </Button>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <Badge variant={property.type === 'sale' ? 'default' : 'secondary'}>
-              {property.type === 'sale' ? 'For Sale' : 'For Rent'}
+            <Badge variant="default">
+              {property.type === 'sale'
+                ? 'For Sale'
+                : 'For Rent'}
             </Badge>
+
             <span className="text-3xl font-bold text-primary">
               €{property.price?.toLocaleString()}
             </span>
@@ -107,11 +172,13 @@ export default function PropertyDetail() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* Main Content */}
+          {/* MAIN */}
           <div className="lg:col-span-2 space-y-8">
 
-            {/* Image Gallery */}
-            <ImageGallery images={property.images || []} />
+            <ImageGallery
+              images={property.images || []}
+              title={property.title}
+            />
 
             {/* Property Features */}
             <Card>
@@ -120,18 +187,26 @@ export default function PropertyDetail() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {property.bedrooms && (
-                    <Feature icon={<Bed className="h-5 w-5 text-gray-400" />} label="Bedrooms" value={property.bedrooms} />
-                  )}
-                  {property.bathrooms && (
-                    <Feature icon={<Bath className="h-5 w-5 text-gray-400" />} label="Bathrooms" value={property.bathrooms} />
-                  )}
-                  {property.area && (
-                    <Feature icon={<Square className="h-5 w-5 text-gray-400" />} label="Area" value={`${property.area} m²`} />
-                  )}
-                  {property.parking !== null && (
-                    <Feature icon={<Car className="h-5 w-5 text-gray-400" />} label="Parking" value={property.parking} />
-                  )}
+                  <Feature
+                    icon={<Bed className="h-5 w-5 text-gray-400" />}
+                    label="Bedrooms"
+                    value={property.bedrooms}
+                  />
+                  <Feature
+                    icon={<Bath className="h-5 w-5 text-gray-400" />}
+                    label="Bathrooms"
+                    value={property.bathrooms}
+                  />
+                  <Feature
+                    icon={<Square className="h-5 w-5 text-gray-400" />}
+                    label="Area"
+                    value={`${property.area} m²`}
+                  />
+                  <Feature
+                    icon={<Car className="h-5 w-5 text-gray-400" />}
+                    label="Parking"
+                    value={property.parking}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -142,7 +217,7 @@ export default function PropertyDetail() {
                 <CardTitle>Description</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
+                <p className="whitespace-pre-line">
                   {property.description}
                 </p>
               </CardContent>
@@ -152,16 +227,25 @@ export default function PropertyDetail() {
             {property.features?.length > 0 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Features & Amenities</CardTitle>
+                  <CardTitle>
+                    Features & Amenities
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    {property.features.map((feature: string, index: number) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <div className="h-2 w-2 bg-primary rounded-full" />
-                        <span className="text-sm">{feature}</span>
-                      </div>
-                    ))}
+                    {property.features.map(
+                      (feature: string, index: number) => (
+                        <div
+                          key={index}
+                          className="flex items-center gap-2"
+                        >
+                          <div className="h-2 w-2 bg-primary rounded-full" />
+                          <span className="text-sm">
+                            {feature}
+                          </span>
+                        </div>
+                      )
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -170,40 +254,68 @@ export default function PropertyDetail() {
             {/* Additional Info */}
             <Card>
               <CardHeader>
-                <CardTitle>Additional Information</CardTitle>
+                <CardTitle>
+                  Additional Information
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
-                  {property.year_built && (
-                    <Info label="Year Built" value={property.year_built} />
-                  )}
-                  <Info label="Property Type" value={property.property_type} />
-                  <Info label="Furnished" value={property.furnished ? 'Yes' : 'No'} />
-                  <Info label="Status" value="Active" />
+                  <Info
+                    label="Year Built"
+                    value={property.year_built}
+                  />
+                  <Info
+                    label="Property Type"
+                    value={property.property_type}
+                  />
+                  <Info
+                    label="Furnished"
+                    value={
+                      property.furnished ? 'Yes' : 'No'
+                    }
+                  />
+                  <Info
+                    label="Status"
+                    value="Active"
+                  />
                 </div>
               </CardContent>
             </Card>
 
           </div>
 
-          {/* Sidebar */}
+          {/* SIDEBAR */}
           <div className="space-y-6">
-            <ContactSellerForm propertyId={property.id} />
+
+            <ContactSellerForm
+              propertyId={property.id}
+              propertyTitle={property.title}
+              sellerEmail={property.seller_email || ''}
+            />
 
             {isAdmin && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Quick Info (Admin Only)</CardTitle>
+                  <CardTitle>
+                    Quick Info (Admin Only)
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Info label="Property ID" value={property.id} />
-                  <Info label="Published" value={new Date(property.created_at).toLocaleDateString()} />
-                  <Info label="Views" value="1,234" />
+                  <Info
+                    label="Property ID"
+                    value={property.id}
+                  />
+                  <Info
+                    label="Published"
+                    value={new Date(
+                      property.created_at
+                    ).toLocaleDateString()}
+                  />
                 </CardContent>
               </Card>
             )}
-          </div>
 
+          </div>
         </div>
       </div>
     </div>
